@@ -371,7 +371,12 @@ class Tournament:
                     if get_seed(team) <= 3:
                         return True
 
+                # 2021 Gonzaga to final 4
                 if team == "W_1" and rd < 5:
+                    return True
+
+                # 2021 Michigan makes it to sweet 16
+                if team == "E_1" and rd < 3:
                     return True
 
                 return False
@@ -393,7 +398,7 @@ class Tournament:
                 self.winner = guess
 
     def __init__(self):
-        self.regions = [x.upper() for x in ["mw", "w", "s", "e"]]
+        self.regions = [x.upper() for x in ["mw", "s", "e", "w"]]
         self.n_seeds = 16
         self.num_teams = len(self.regions) * self.n_seeds
         self.num_rds = int(np.log2(self.num_teams))
