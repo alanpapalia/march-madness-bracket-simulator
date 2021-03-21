@@ -2,6 +2,7 @@ from typing import Tuple, List, Dict
 import re
 import numpy as np
 import queue
+import time
 
 
 ##### HELPER FUNCTIONS ########
@@ -494,16 +495,24 @@ if __name__ == "__main__":
     games and update the whole tree) can be seen in test_random_assignment()
     """
 
-    # TODO make deterministic way of iterating through possible combinations
     # TODO evaluate other ways of determining the expected value of each bracket
     # based on the consideration that incorrectly guessing a game eliminates the
     # probability of winning points down the road with that team
+
+    # TODO write function to check the points expected from the remainder of a
+    # bracket
+
+    # TODO write function to determine points from given bracket with some
+    # flexibility for games that haven't been decided yet 
+
 
     tournament = Tournament()
     max_pts = 0
     # num_trials = 9999999
     # for i in range(num_trials):
     i = 0
+    last_time = time.time()
+    n = 10000
     while True:
         i += 1
         pts = tournament.test_random_assignment()
@@ -511,5 +520,8 @@ if __name__ == "__main__":
             max_pts = pts
             tournament.print_info()
 
-        if i % 10000 == 0:
+        if i % n == 0:
+            # curr_time = time.time()
             print(f"Random Trial: {i}")
+            # print(f"Time per trial: {(curr_time-last_time) / float(n)} sec")
+            # last_time = curr_time
