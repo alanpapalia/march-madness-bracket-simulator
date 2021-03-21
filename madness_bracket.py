@@ -215,7 +215,6 @@ def make_win_prob_table() -> Dict[str, List[float]]:
     return win_probs
 
 
-
 class Tournament:
     class Game:
         def __init__(
@@ -226,6 +225,7 @@ class Tournament:
             child_game_2=None,
             winner: int = None,
             rd: int = None,
+            game_id: int = None
         ):
             assert winner in [0, 1, None]
             assert rd > 0
@@ -236,18 +236,25 @@ class Tournament:
             self.child1 = child_game_1
             self.child2 = child_game_2
             self.win_probs = make_win_prob_table()
+            self.game_id = game_id
 
             # all points from all children games (recursively summed to leaves of
             # tree)
             self.pts_summed = 0
 
         def __str__(self):
-            if self.winner == 0:
-                return f"Matchup {self.t1} vs {self.t2} Rd {self.rd} Winner {self.t1}: Expected Pts = {self.pts_summed}"
-            elif self.winner == 1:
-                return f"Matchup {self.t1} vs {self.t2} Rd {self.rd} Winner {self.t2}: Expected Pts = {self.pts_summed}"
-            elif self.winner is None:
-                return f"Matchup {self.t1} vs {self.t2} Rd {self.rd} Winner {self.winner}: Expected Pts = {self.pts_summed}"
+            assert self.winner in [0, 1], "Need to have determined winner!"
+            if self.game_id is not None:
+                if self.winner == 0:
+                    return f"Matchup {self.game_id:2} | {self.t1:5} vs {self.t2:5} | Rd {self.rd:1} | Winner {self.t1:5} | Expected Pts = {self.pts_summed:4.2f}"
+                elif self.winner == 1:
+                    return f"Matchup {self.game_id:2} | {self.t1:5} vs {self.t2:5} | Rd {self.rd:1} | Winner {self.t2:5} | Expected Pts = {self.pts_summed:4.2f}"
+
+            else:
+                if self.winner == 0:
+                    return f"Matchup | {self.t1:5} vs {self.t2:5} | Rd {self.rd:1} | Winner {self.t1:5} | Expected Pts = {self.pts_summed:4.2f}"
+                elif self.winner == 1:
+                    return f"Matchup | {self.t1:5} vs {self.t2:5} | Rd {self.rd:1} | Winner {self.t2:5} | Expected Pts = {self.pts_summed:4.2f}"
 
         def get_winning_team(self) -> str:
             """Gets name of winning team in this game
@@ -358,7 +365,7 @@ class Tournament:
 
             def is_special_bracket_condition(team, rd):
                 """Just a function for special edge cases I want to have to enforce
-                my preferences (e.g. Gonzaga must wins game in first 4 rds)
+                my preferences (e.g. Gonzaga must win game in first 4 rds)
 
                 Args:
                     team (str): the team string (e.g. 'MW_3')
@@ -368,8 +375,9 @@ class Tournament:
                     bool: whether this team will be determined to win
                 """
 
+                # in 1st round 1 and 2 seeds always win
                 if rd == 1:
-                    if get_seed(team) <= 3:
+                    if get_seed(team) <= 2:
                         return True
 
                 # 2021 Gonzaga to final 4
@@ -379,6 +387,16 @@ class Tournament:
                 # 2021 Michigan makes it to sweet 16
                 if team == "E_1" and rd < 3:
                     return True
+
+                # 2021 Wisconsin makes it to sweet 16
+                if team == "S_9" and rd < 3:
+                    return True
+
+                # 2021 Loyola makes it to sweet 16
+                if team == "MW_8" and rd < 3:
+                    return True
+
+
 
                 return False
 
@@ -408,18 +426,16 @@ class Tournament:
         # initialize first round
         teams = get_teams(self.regions, self.n_seeds)
         curr_round_ind = 0
+        game_cnt = 1
         for region in self.regions:
             for i in range(0, int(self.n_seeds / 2)):
                 t1_ind = i + 1
                 t2_ind = self.n_seeds - i
                 t1 = teams[region][t1_ind - 1]
                 t2 = teams[region][t2_ind - 1]
-                if i < 3:
-                    game = self.Game(t1, t2, winner=0, rd=curr_round_ind + 1)
-                    self.games[curr_round_ind].append(game)
-                else:
-                    game = self.Game(t1, t2, rd=curr_round_ind + 1)
-                    self.games[curr_round_ind].append(game)
+                game = self.Game(t1, t2, rd=curr_round_ind + 1, game_id = game_cnt)
+                self.games[curr_round_ind].append(game)
+                game_cnt += 1
 
         for round_ind in range(1, self.num_rds):
             num_games = num_games_in_rd(round_ind + 1, self.num_teams)
@@ -430,8 +446,10 @@ class Tournament:
                     child_game_1=child_game_1,
                     child_game_2=child_game_2,
                     rd=round_ind + 1,
+                    game_id = game_cnt
                 )
                 self.games[round_ind].append(game)
+                game_cnt += 1
 
         assert len(self.games[-1]) == 1, "incorrectly accessing the title game"
         title_game = self.games[-1][0]
@@ -468,7 +486,7 @@ class Tournament:
                 game_queue.put(child1)
                 game_queue.put(child2)
 
-        print(f"\n Total Expected Pts: {title_game.pts_summed}\n")
+        print(f"\n Total Expected Pts: {title_game.pts_summed:.3f}\n")
         print("************************")
         print("\n")
 
@@ -487,7 +505,7 @@ if __name__ == "__main__":
     determined by some measure and then the games in the second round look at
     their 'children' games and take the winners of each of their 2 children
     games to be the participants in their own game.
-    `
+
     The tournament is a tree style object, with the root being the
     championship game and each node having a branching factor of 2.
 
@@ -503,8 +521,7 @@ if __name__ == "__main__":
     # bracket
 
     # TODO write function to determine points from given bracket with some
-    # flexibility for games that haven't been decided yet 
-
+    # flexibility for games that haven't been decided yet
 
     tournament = Tournament()
     max_pts = 0
