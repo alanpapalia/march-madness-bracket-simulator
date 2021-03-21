@@ -108,15 +108,13 @@ def get_expected_pts(t1: str, t2: str, rd: int, win_probs) -> Tuple[float, float
         seed1 = get_seed(t1)
         seed2 = get_seed(t2)
 
-        t1_pts = rd
-        t2_pts = rd
+        t1_pts = 2**(rd-1)
+        t2_pts = 2**(rd-1)
         if seed1 > seed2:
-            t1_pts *= 2
             seed_diff = seed1 - seed2
             assert seed_diff > 0
             t1_pts += seed_diff
         elif seed2 > seed1:
-            t2_pts *= 2
             seed_diff = seed2 - seed1
             assert seed_diff > 0
             t2_pts += seed_diff
@@ -380,6 +378,7 @@ class Tournament:
                     if get_seed(team) <= 2:
                         return True
 
+
                 # 2021 Gonzaga to final 4
                 if team == "W_1" and rd < 5:
                     return True
@@ -389,11 +388,11 @@ class Tournament:
                     return True
 
                 # 2021 Wisconsin makes it to sweet 16
-                if team == "S_9" and rd < 3:
+                if team == "S_9" and rd == 1:
                     return True
 
                 # 2021 Loyola makes it to sweet 16
-                if team == "MW_8" and rd < 3:
+                if team == "MW_8" and rd == 1:
                     return True
 
 
