@@ -122,10 +122,11 @@ def get_expected_pts(t1: str, t2: str, rd: int, win_probs) -> Tuple[float, float
         return (t1_pts, t2_pts)
 
     def get_win_prob(t1: str, t2: str, rd: int, win_probs) -> Tuple[float, float]:
-        t1_prob = win_probs[t1][rd - 1]
-        t2_prob = win_probs[t2][rd - 1]
-        prob_sum = t1_prob + t2_prob
-        return (t1_prob / prob_sum, t2_prob / prob_sum)
+        t1_prob = win_probs[t1][rd - 1] / 100.0
+        t2_prob = win_probs[t2][rd - 1] / 100.0
+        return (t1_prob, t2_prob)
+        # prob_sum = t1_prob + t2_prob
+        # return (t1_prob / prob_sum, t2_prob / prob_sum)
 
     win_probs = get_win_prob(t1, t2, rd, win_probs)
     pts = get_pts(t1, t2, rd)
@@ -239,20 +240,21 @@ class Tournament:
             # all points from all children games (recursively summed to leaves of
             # tree)
             self.pts_summed = 0
+            self.pts_self = 0
 
         def __str__(self):
             assert self.winner in [0, 1], "Need to have determined winner!"
             if self.game_id is not None:
                 if self.winner == 0:
-                    return f"Matchup {self.game_id:2} | {self.t1:5} vs {self.t2:5} | Rd {self.rd:1} | Winner {self.t1:5} | Expected Pts = {self.pts_summed:4.2f}"
+                    return f"Matchup {self.game_id:2} | {self.t1:5} vs {self.t2:5} | Rd {self.rd:1} | Winner {self.t1:5} | Expected Pts = {self.pts_self:4.2f}"
                 elif self.winner == 1:
-                    return f"Matchup {self.game_id:2} | {self.t1:5} vs {self.t2:5} | Rd {self.rd:1} | Winner {self.t2:5} | Expected Pts = {self.pts_summed:4.2f}"
+                    return f"Matchup {self.game_id:2} | {self.t1:5} vs {self.t2:5} | Rd {self.rd:1} | Winner {self.t2:5} | Expected Pts = {self.pts_self:4.2f}"
 
             else:
                 if self.winner == 0:
-                    return f"Matchup | {self.t1:5} vs {self.t2:5} | Rd {self.rd:1} | Winner {self.t1:5} | Expected Pts = {self.pts_summed:4.2f}"
+                    return f"Matchup | {self.t1:5} vs {self.t2:5} | Rd {self.rd:1} | Winner {self.t1:5} | Expected Pts = {self.pts_self:4.2f}"
                 elif self.winner == 1:
-                    return f"Matchup | {self.t1:5} vs {self.t2:5} | Rd {self.rd:1} | Winner {self.t2:5} | Expected Pts = {self.pts_summed:4.2f}"
+                    return f"Matchup | {self.t1:5} vs {self.t2:5} | Rd {self.rd:1} | Winner {self.t2:5} | Expected Pts = {self.pts_self:4.2f}"
 
         def get_winning_team(self) -> str:
             """Gets name of winning team in this game
@@ -297,19 +299,19 @@ class Tournament:
             assert self.t1 is not None and self.t2 is not None
 
             # points from this game
-            expected_pts = get_expected_pts(self.t1, self.t2, self.rd, self.win_probs)[
+            self.pts_self = get_expected_pts(self.t1, self.t2, self.rd, self.win_probs)[
                 self.winner
             ]
 
             # check if leaf game
             if self.child1 is None or self.child2 is None:
                 assert self.child1 is None and self.child2 is None
-                self.pts_summed = expected_pts
+                self.pts_summed = self.pts_self
             else:
                 self.child1.update_pts_summed_recursively()
                 self.child2.update_pts_summed_recursively()
                 self.pts_summed = (
-                    expected_pts + self.child1.pts_summed + self.child2.pts_summed
+                    self.pts_self + self.child1.pts_summed + self.child2.pts_summed
                 )
 
         def check_consistency(self) -> None:
@@ -521,6 +523,9 @@ if __name__ == "__main__":
 
     # TODO write function to determine points from given bracket with some
     # flexibility for games that haven't been decided yet
+
+    # TODO when calculating upset points we should look at the expectation of
+    # the seed that a given team will be playing against
 
     tournament = Tournament()
     max_pts = 0
