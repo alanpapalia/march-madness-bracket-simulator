@@ -3,6 +3,7 @@ import re
 import numpy as np
 import queue
 import time
+from os.path import isfile, expanduser, join
 
 
 ##### HELPER FUNCTIONS ########
@@ -125,8 +126,6 @@ def get_expected_pts(t1: str, t2: str, rd: int, win_probs) -> Tuple[float, float
         t1_prob = win_probs[t1][rd - 1] / 100.0
         t2_prob = win_probs[t2][rd - 1] / 100.0
         return (t1_prob, t2_prob)
-        # prob_sum = t1_prob + t2_prob
-        # return (t1_prob / prob_sum, t2_prob / prob_sum)
 
     win_probs = get_win_prob(t1, t2, rd, win_probs)
     pts = get_pts(t1, t2, rd)
@@ -135,7 +134,7 @@ def get_expected_pts(t1: str, t2: str, rd: int, win_probs) -> Tuple[float, float
     return (expected_1, expected_2)
 
 
-def make_win_prob_table() -> Dict[str, List[float]]:
+def make_win_prob_table(filepath: str) -> Dict[str, List[float]]:
     """Returns a table of the probabilities that each team will make it to a
     certain round. The table is keyed first by the team name (e.g. 'MW_3' and
     the entry corresponding to that key is a list where each index is the
@@ -146,17 +145,14 @@ def make_win_prob_table() -> Dict[str, List[float]]:
     making it to round 3
     """
 
-    def parse_win_probs(win_prob_str: str) -> Dict[str, List[float]]:
-        """Parses a string of known format to build a lookup probability table
-        from it. This assumes that the team names (e.g. 'MW_3') are separators
-        for the probabilities inside the string.
+    assert isfile(filepath), f"Could not find the file: {filepath}"
 
-        The expected format is (team_1 # # # # team_2 # # # # team_3 # # # #)
-        where the '#' indicate a probability value associated with the previous team
-
+    def parse_win_probs_file(filepath):
+        """Parses the win probability file and returns a lookup table of
+        probabilities for each team
 
         Args:
-            win_prob_str (str): the string to parse
+            filepath (str): the path to the file to parse
 
         Returns:
             dict[str, List[float]]: the lookup table for probabilities
@@ -191,26 +187,50 @@ def make_win_prob_table() -> Dict[str, List[float]]:
             div = entry[len(seed) :]
             return str(div + "_" + seed)
 
-        entries = win_prob_str.split()
-        win_probs = {}
-        last_seed = None
-        for e in entries:
-            # if seed start adding info for this seed
-            if is_seed(e):
-                last_seed = sanitize_seed_entry(e)
-                win_probs[last_seed] = []
-            else:
-                # we have already started parsing probs for this seed
-                entry = sanitize_prob_entry(e)
-                assert (
-                    entry <= 100.0
-                ), "Error, win probability greater than 100 percent observed"
-                win_probs[last_seed].append(entry)
+        def is_team_name(entry: str) -> bool:
+            """returns whether the string passed in is a team name (e.g. 'MW_3'
+            -> True, 0.0075 -> False)
+
+            Args:
+                entry (str): the entry to check
+
+            Returns:
+                bool: if entry indicates a new team
+            """
+            if entry.replace('.','').isnumeric():
+                return False
+
+            if entry.isalpha():
+                return True
+
+            punctuation = ["'", ".", "&"]
+            for p in punctuation:
+                if p in entry:
+                    return True
+
+            return False
+
+
+        # iterate over each line in the file
+        with open(filepath) as f:
+            win_probs = {}
+            for line in f:
+                line_items = line.split()
+
+                # remove the team name
+                while is_team_name(line_items[1]):
+                    line_items.pop(1)
+
+                assert is_seed(line_items[0])
+                sanitized_seed = sanitize_seed_entry(line_items[0])
+                seed_win_probs = [sanitize_prob_entry(e) for e in line_items[1:]]
+                win_probs[sanitized_seed] = seed_win_probs
 
         return win_probs
 
-    win_prob_str = "1W  99.6   91.2   77.3   60.5   46.3   34.4   1MW 96.1   67.8   52.7   34.5   22.2   10.7   1E  98.4   72.7   53.3   37.6   17.4   10.4   1S  97.5   67.2   46.6   31.5   18.0    8.2   2MW 94.4   70.6   49.9   28.2   16.8    7.4   2W  91.0   70.6   49.7   19.3   11.3    6.4   2S  93.8   66.2   41.9   21.0   10.1    3.7   2E  95.7   58.6   37.9   17.8    5.8    2.7   5S  80.7   45.8   18.4    9.5    4.0    1.2   8MW 61.9   22.3   13.9    6.9    3.3    1.1   4S  72.6   40.1   15.7    8.0    3.3    1.0   4E  81.2   46.3   16.8    8.4    2.3    0.9   4W  74.3   43.3   10.3    4.7    2.1    0.9   3S  78.1   43.8   21.0    8.5    3.2    0.9   5MW 73.9   45.3   15.4    6.7    2.8    0.8   6W  70.3   41.0   17.5    4.5    1.9    0.8   9S  56.4   20.1   10.8    5.6    2.4    0.7   5E  68.0   37.2   13.4    6.6    1.8    0.7   6MW 62.2   35.7   14.7    5.8    2.4    0.7   6S  60.5   32.8   15.4    6.2    2.3    0.6   7E  57.4   25.3   14.3    5.8    1.6    0.6   3MW 84.1   44.1   17.0    6.3    2.5    0.6   3W  82.4   43.9   17.5    4.1    1.6    0.6   6E  63.9   36.5   16.2    6.1    1.6    0.6   3E  74.8   40.5   17.5    6.5    1.6    0.6   5W  70.9   38.3    7.3    3.1    1.3    0.5   9E  53.1   15.4    7.8    3.7    0.9    0.3   4MW 73.6   37.6   10.6    4.0    1.4    0.3   8S  43.6   12.5    6.0    2.7    1.0    0.2   10E  42.6   15.6    7.7    2.6    0.6    0.2   8E  46.9   11.8    5.7    2.5    0.6    0.2   10MW 54.6   16.2    7.6    2.5    0.9    0.2   7S  55.6   19.3    8.6    2.8    0.8    0.2   9MW 38.1    9.4    4.8    1.8    0.6    0.1   7W  54.4   15.6    6.9    1.3    0.4    0.1   11S  39.5   17.1    6.2    1.9    0.5    0.1   7MW 45.4   12.2    5.2    1.5    0.5    0.10  11MW 37.8   17.2    5.2    1.5    0.5    0.08  10S  44.4   13.5    5.3    1.5    0.4    0.07  8W  53.6    5.1    2.2    0.7    0.2    0.06  10W  45.6   11.3    4.5    0.7    0.2    0.05  11E  20.9    9.5    3.1    0.9    0.2    0.04  9W  46.4    3.6    1.4    0.4    0.1    0.03  12E  32.0   11.7    2.4    0.7    0.1    0.03  11W  18.6    7.6    2.1    0.3    0.08   0.02  13S  27.4    9.0    1.8    0.5    0.10   0.01  11E  15.2    6.1    1.7    0.4    0.06   0.01  12W  29.1   10.2    0.9    0.2    0.05   0.010 12MW 26.1    9.4    1.4    0.3    0.06   0.008 13W  25.7    8.2    0.6    0.1    0.03   0.005 14E  25.2    7.4    1.5    0.2    0.02   0.004 14S  21.9    6.3    1.4    0.3    0.04   0.004 13MW 26.4    7.7    1.0    0.2    0.04   0.004 11W  11.0    3.8    0.8    0.08   0.02   0.003 13E  18.8    4.7    0.6    0.1    0.010  0.001 12S  19.3    5.0    0.6    0.1    0.02   <.001 14W  17.6    3.7    0.5    0.03   0.004  <.001 15W  9.0    2.5    0.6    0.04   0.005  <.001 14MW 15.9    2.9    0.4    0.04   0.005  <.001 15MW 5.6    1.0    0.1    0.01   <.001  <.001 15S  6.2    1.0    0.1    0.009  <.001  <.001 16MW 3.9    0.5    0.09   0.009  <.001  <.001 15E  4.3    0.4    0.05   0.003  <.001  <.001 16S  2.5    0.2    0.02   0.001  <.001  <.001 16E  1.2    0.09   0.007  <.001  <.001  <.001 16W  0.2    0.02   0.002  <.001  <.001  <.001 16E  0.5    0.02   0.001  <.001  <.001  <.001 16W  0.2    0.02   0.001  <.001  <.001  <.001"
-    win_probs = parse_win_probs(win_prob_str)
+    # win_prob_str = "1W  99.6   91.2   77.3   60.5   46.3   34.4   1MW 96.1   67.8   52.7   34.5   22.2   10.7   1E  98.4   72.7   53.3   37.6   17.4   10.4   1S  97.5   67.2   46.6   31.5   18.0    8.2   2MW 94.4   70.6   49.9   28.2   16.8    7.4   2W  91.0   70.6   49.7   19.3   11.3    6.4   2S  93.8   66.2   41.9   21.0   10.1    3.7   2E  95.7   58.6   37.9   17.8    5.8    2.7   5S  80.7   45.8   18.4    9.5    4.0    1.2   8MW 61.9   22.3   13.9    6.9    3.3    1.1   4S  72.6   40.1   15.7    8.0    3.3    1.0   4E  81.2   46.3   16.8    8.4    2.3    0.9   4W  74.3   43.3   10.3    4.7    2.1    0.9   3S  78.1   43.8   21.0    8.5    3.2    0.9   5MW 73.9   45.3   15.4    6.7    2.8    0.8   6W  70.3   41.0   17.5    4.5    1.9    0.8   9S  56.4   20.1   10.8    5.6    2.4    0.7   5E  68.0   37.2   13.4    6.6    1.8    0.7   6MW 62.2   35.7   14.7    5.8    2.4    0.7   6S  60.5   32.8   15.4    6.2    2.3    0.6   7E  57.4   25.3   14.3    5.8    1.6    0.6   3MW 84.1   44.1   17.0    6.3    2.5    0.6   3W  82.4   43.9   17.5    4.1    1.6    0.6   6E  63.9   36.5   16.2    6.1    1.6    0.6   3E  74.8   40.5   17.5    6.5    1.6    0.6   5W  70.9   38.3    7.3    3.1    1.3    0.5   9E  53.1   15.4    7.8    3.7    0.9    0.3   4MW 73.6   37.6   10.6    4.0    1.4    0.3   8S  43.6   12.5    6.0    2.7    1.0    0.2   10E  42.6   15.6    7.7    2.6    0.6    0.2   8E  46.9   11.8    5.7    2.5    0.6    0.2   10MW 54.6   16.2    7.6    2.5    0.9    0.2   7S  55.6   19.3    8.6    2.8    0.8    0.2   9MW 38.1    9.4    4.8    1.8    0.6    0.1   7W  54.4   15.6    6.9    1.3    0.4    0.1   11S  39.5   17.1    6.2    1.9    0.5    0.1   7MW 45.4   12.2    5.2    1.5    0.5    0.10  11MW 37.8   17.2    5.2    1.5    0.5    0.08  10S  44.4   13.5    5.3    1.5    0.4    0.07  8W  53.6    5.1    2.2    0.7    0.2    0.06  10W  45.6   11.3    4.5    0.7    0.2    0.05  11E  20.9    9.5    3.1    0.9    0.2    0.04  9W  46.4    3.6    1.4    0.4    0.1    0.03  12E  32.0   11.7    2.4    0.7    0.1    0.03  11W  18.6    7.6    2.1    0.3    0.08   0.02  13S  27.4    9.0    1.8    0.5    0.10   0.01  11E  15.2    6.1    1.7    0.4    0.06   0.01  12W  29.1   10.2    0.9    0.2    0.05   0.010 12MW 26.1    9.4    1.4    0.3    0.06   0.008 13W  25.7    8.2    0.6    0.1    0.03   0.005 14E  25.2    7.4    1.5    0.2    0.02   0.004 14S  21.9    6.3    1.4    0.3    0.04   0.004 13MW 26.4    7.7    1.0    0.2    0.04   0.004 11W  11.0    3.8    0.8    0.08   0.02   0.003 13E  18.8    4.7    0.6    0.1    0.010  0.001 12S  19.3    5.0    0.6    0.1    0.02   <.001 14W  17.6    3.7    0.5    0.03   0.004  <.001 15W  9.0    2.5    0.6    0.04   0.005  <.001 14MW 15.9    2.9    0.4    0.04   0.005  <.001 15MW 5.6    1.0    0.1    0.01   <.001  <.001 15S  6.2    1.0    0.1    0.009  <.001  <.001 16MW 3.9    0.5    0.09   0.009  <.001  <.001 15E  4.3    0.4    0.05   0.003  <.001  <.001 16S  2.5    0.2    0.02   0.001  <.001  <.001 16E  1.2    0.09   0.007  <.001  <.001  <.001 16W  0.2    0.02   0.002  <.001  <.001  <.001 16E  0.5    0.02   0.001  <.001  <.001  <.001 16W  0.2    0.02   0.001  <.001  <.001  <.001"
+    # win_probs = parse_win_probs(win_prob_str)
+    win_probs = parse_win_probs_file(filepath)
     return win_probs
 
 
@@ -218,6 +238,7 @@ class Tournament:
     class Game:
         def __init__(
             self,
+            win_probs: Dict[str, List[float]],
             t1: str = None,
             t2: str = None,
             child_game_1=None,
@@ -234,7 +255,7 @@ class Tournament:
             self.winner = winner
             self.child1 = child_game_1
             self.child2 = child_game_2
-            self.win_probs = make_win_prob_table()
+            self.win_probs = win_probs
             self.game_id = game_id
 
             # all points from all children games (recursively summed to leaves of
@@ -243,12 +264,14 @@ class Tournament:
             self.pts_self = 0
 
         def __str__(self):
-            assert self.winner in [0, 1], "Need to have determined winner!"
+            # assert self.winner in [0, 1], "Need to have determined winner!"
             if self.game_id is not None:
                 if self.winner == 0:
                     return f"Matchup {self.game_id:2} | {self.t1:5} vs {self.t2:5} | Rd {self.rd:1} | Winner {self.t1:5} | Expected Pts = {self.pts_self:4.2f}"
                 elif self.winner == 1:
                     return f"Matchup {self.game_id:2} | {self.t1:5} vs {self.t2:5} | Rd {self.rd:1} | Winner {self.t2:5} | Expected Pts = {self.pts_self:4.2f}"
+                else: # winner is None
+                    return f"Matchup {self.game_id:2} | {self.t1} vs {self.t2} | Rd {self.rd} | Winner None"
 
             else:
                 if self.winner == 0:
@@ -381,23 +404,34 @@ class Tournament:
                         return True
 
 
-                # 2021 Gonzaga to final 4
-                if team == "W_1" and rd < 5:
+                # 2022 UK to final 4
+                if team == "E_2" and rd < 5:
                     return True
 
-                # 2021 Michigan makes it to sweet 16
-                if team == "E_1" and rd < 3:
+                # 2022 Yale lose 1st round
+                if team == "E_3" and rd < 2:
                     return True
 
-                # 2021 Wisconsin makes it to sweet 16
-                if team == "S_9" and rd == 1:
+                # 2022 Houston past 1st round
+                if team == "S_5" and rd < 2:
                     return True
 
-                # 2021 Loyola makes it to sweet 16
-                if team == "MW_8" and rd == 1:
+                # 2022 Tennessee past 1st round
+                if team == "S_3" and rd < 2:
                     return True
 
 
+                # 2022 Iowa past 1st round
+                # if team == "MW_5" and rd < 2:
+                #     return True
+
+                # # 2022 LSU past 1st round
+                # if team == "MW_6" and rd < 2:
+                #     return True
+
+                # 2022 Providence loses 1st round
+                if team == "MW_13" and rd < 2:
+                    return True
 
                 return False
 
@@ -417,33 +451,58 @@ class Tournament:
                 guess = round(np.random.uniform())
                 self.winner = guess
 
-    def __init__(self):
+    def _get_child_game_indices(self, rd: int, game_idx: int, num_total_teams) -> Tuple:
+        num_games = num_games_in_rd(rd, num_total_teams)
+        num_games_in_region = int(num_games / 4)
+        game_1_idx = game_idx * 2
+
+    @staticmethod
+    def _get_first_round_seed_pairs():
+        """Returns the first round seed pairs
+
+        Returns:
+            List[Tuple[int, int]]: the seed pairs for the first round
+        """
+        return [
+            (1, 16),
+            (8, 9),
+            (5, 12),
+            (4, 13),
+            (6, 11),
+            (3, 14),
+            (7, 10),
+            (2, 15),
+        ]
+
+    def __init__(self, win_prob_filepath):
         self.regions = [x.upper() for x in ["mw", "s", "e", "w"]]
         self.n_seeds = 16
         self.num_teams = len(self.regions) * self.n_seeds
         self.num_rds = int(np.log2(self.num_teams))
         self.games = [[] for x in range(self.num_rds)]
+        self.win_probs = make_win_prob_table(win_prob_filepath)
 
         # initialize first round
         teams = get_teams(self.regions, self.n_seeds)
         curr_round_ind = 0
         game_cnt = 1
+        first_rd_seed_pairs = self._get_first_round_seed_pairs()
         for region in self.regions:
-            for i in range(0, int(self.n_seeds / 2)):
-                t1_ind = i + 1
-                t2_ind = self.n_seeds - i
+            for t1_ind, t2_ind in first_rd_seed_pairs:
                 t1 = teams[region][t1_ind - 1]
                 t2 = teams[region][t2_ind - 1]
-                game = self.Game(t1, t2, rd=curr_round_ind + 1, game_id = game_cnt)
+                game = self.Game(self.win_probs, t1, t2, rd=curr_round_ind + 1, game_id = game_cnt)
                 self.games[curr_round_ind].append(game)
                 game_cnt += 1
 
+        # initialize remaining rounds
         for round_ind in range(1, self.num_rds):
             num_games = num_games_in_rd(round_ind + 1, self.num_teams)
             for game_ind in range(num_games):
-                child_game_1 = self.games[round_ind - 1][game_ind * 2]
-                child_game_2 = self.games[round_ind - 1][game_ind * 2 + 1]
+                child_game_1 = self.games[round_ind - 1][2*game_ind ]
+                child_game_2 = self.games[round_ind - 1][2*game_ind + 1]
                 game = self.Game(
+                    self.win_probs,
                     child_game_1=child_game_1,
                     child_game_2=child_game_2,
                     rd=round_ind + 1,
@@ -453,7 +512,6 @@ class Tournament:
                 game_cnt += 1
 
         assert len(self.games[-1]) == 1, "incorrectly accessing the title game"
-        title_game = self.games[-1][0]
         self.title_game = self.games[-1][0]
 
     def print_info(self):
@@ -527,14 +585,16 @@ if __name__ == "__main__":
     # TODO when calculating upset points we should look at the expectation of
     # the seed that a given team will be playing against
 
-    tournament = Tournament()
+    home_dir = expanduser("~")
+    kenpom_filepath = join(home_dir, "march-madness-bracket-simulator", "2022_kenpom.txt")
+    tournament = Tournament(kenpom_filepath)
     max_pts = 0
     # num_trials = 9999999
     # for i in range(num_trials):
     i = 0
     last_time = time.time()
     n = 10000
-    while True:
+    while i < 1e9:
         i += 1
         pts = tournament.test_random_assignment()
         if pts > max_pts:
